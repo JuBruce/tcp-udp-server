@@ -1,7 +1,7 @@
 from socket import *
 import sys
 from threading import Thread
-import os 
+import os
 from select import select
 import datetime
 import errno
@@ -46,9 +46,9 @@ def clientthread(conn,port):
             conn.send(responce.encode())
         elif 'RCPT TO' in cap_sentence:
             responce = '250 OK'
-            rcptto = cap_sentence 
-            reciever = cap_sentence  
-            reciever = reciever[8:]             #----START used the email in rcpt to 
+            rcptto = cap_sentence
+            reciever = cap_sentence
+            reciever = reciever[8:]             #----START used the email in rcpt to
             rcptto = rcptto[8:]                 #----to create and new email dir
             rcptto = rcptto.split('@')[0]       #----if one does not exist
             current_directory = os.getcwd()     #----
@@ -84,8 +84,8 @@ def clientthread(conn,port):
                 conn.send(dataresp.encode())    #----
                 if data == '.':                 #----
                     break                       #----END loop for email content
-           
-            filepath = os.path.join(current_directory, emailfile) 
+
+            filepath = os.path.join(current_directory, emailfile)
             f = open(filepath, "a")             #---- START writes content to the new email file
             f.write(date + '\n')                #---- write date
             f.write('From: ' + mailfrom + '\n') #---- write who from
@@ -103,13 +103,13 @@ def clientthread(conn,port):
         else:
             responce = 'Invalid command'
             conn.send(responce.encode())
-            
-           
+
+
 
 
     conn.close()
 
-    
+
 
 ##################################
 # UDP connection thread
@@ -138,7 +138,7 @@ def UDP_connect(udp_listen_port):
         else:
             pass
 
-        
+
     udp.sendto(modifiedMessage.encode(), clientAddress)
 
 udp = socket(AF_INET, SOCK_DGRAM)
@@ -156,13 +156,13 @@ while True:
 
     for s in inputready:
         if s == tcp:
-            conn, addr = tcp.accept()   
+            conn, addr = tcp.accept()
             threadTCP = Thread(target = clientthread(conn,tcp_listen_port))
-            threadTCP.start()   
-            
+            threadTCP.start()
+
         elif s == udp:
             threadUDP = Thread(target = UDP_connect(udp_listen_port))
             threadUDP.start()
-            
+
         else:
             print ("unknown socket:", s)
