@@ -143,6 +143,7 @@ def UDP_connect(udp_listen_port):
                 current_directory = os.getcwd()
                 i = 0
                 while i < count and count < len(files):
+                    print('top of while')
                     message = ''
                     mail = files[i]
                     filepath = os.path.join(mail_directory, mail)
