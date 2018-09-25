@@ -8,10 +8,18 @@ sendOrRecieve = input()
 if sendOrRecieve == 'send':
     clientSocket = socket(AF_INET, SOCK_STREAM)
     clientSocket.connect((serverName, tcpserverPort))
-    #print('220 Welcome to the TCP server, would you like to send or recieve?.')
 elif sendOrRecieve == 'recieve':
     clientSocket = socket(AF_INET, SOCK_DGRAM)
-    message = input('Say some shit:')
+    #message = input('Send a get request.\n')
+    lines = []
+    while True:
+        line = input()
+        if line:
+            lines.append(line)
+        else:
+            break
+    message = '\n'.join(lines)
+    print(message)
     clientSocket.sendto(message.encode(),(serverName,udpserverport))
     modifiedMessage, serverAddress = clientSocket.recvfrom(2048)
     print(modifiedMessage.decode())
