@@ -101,7 +101,7 @@ def clientthread(conn,port):
             conn.close()
             sys.exit()
         else:
-            responce = 'Invalid command'
+            responce = '500 Invalid command'
             conn.send(responce.encode())
 
 
@@ -120,24 +120,47 @@ def UDP_connect(udp_listen_port):
         message, clientAddress = udp.recvfrom(2048)
         modifiedMessage = message.decode().upper()
         print('hey')
-        if modifiedMessage == 'HELO':
-            responce = 'helo'
-            udp.sendto(responce.encode(), clientAddress)
-        elif modifiedMessage == 'MAIL FROM':
-            responce = 'mail from'
-            udp.sendto(responce.encode(), clientAddress)
-        elif modifiedMessage == 'RCPT TO':
-            responce = 'rcpt to'
-            udp.sendto(responce.encode(), clientAddress)
-        elif modifiedMessage == 'DATA':
-            responce = 'data'
-            udp.sendto(responce.encode(), clientAddress)
-        elif modifiedMessage == 'QUIT':
-            responce = 'quit'
-            udp.sendto(responce.encode(), clientAddress)
-        else:
-            pass
 
+        if 'GET' in modifiedMessage:
+            print(modifiedMessage)
+            msg = modifiedMessage.split('/')
+            user = msg[2]
+            count = modifiedMessage.split('COUNT:')
+            count = int(count[1])
+            print(count)
+            print(user)
+            mail_directory = os.getcwd()
+            mail_directory = os.path.join(mail_directory+'/db/'+user)
+            print(mail_directory)
+            if not os.path.exists(mail_directory): 
+                responce = '404: File path not found.'
+                udp.sendto(responce.encode(), clientAddress)
+            else:
+                files = os.listdir(mail_directory)
+                files = sorted(files) 
+                files = reversed(files)
+                files = list(files)
+                current_directory = os.getcwd()
+                i = 0
+                while i < count and count < len(files):
+                    message = ''
+                    mail = files[i]
+                    filepath = os.path.join(mail_directory, mail)
+                    f = open(filepath, 'r')
+                    message = f.read()
+                    f.close()
+                    mail = mail.split('.')[0]
+                    mail = mail + '.txt'
+                    storepath = os.path.join(current_directory,mail)
+                    m = open(storepath, 'a')
+                    print(message)
+                    m.write(message)
+                    f.close()
+                    i += 1
+
+
+        else: 
+            print('Invalid GET request')
 
     udp.sendto(modifiedMessage.encode(), clientAddress)
 
