@@ -1,11 +1,11 @@
 from socket import *
 import sys
-from threading import Thread
+from threading import *
 import os
 from select import select
 import datetime
-import errno
-from time import sleep
+import _thread
+
 
 ################################################
 # Gets current file path and creates a 'db' file
@@ -29,22 +29,23 @@ if len(arg_list) != 3:
 # TCP client thread
 ########################
 def clientthread(conn,port):
-    print('Server is ready to recieve TCP.')
-
+    count = 0
     while True:
-        print('here')
         sentence = conn.recv(1024).decode()
         cap_sentence = sentence.upper()
         if cap_sentence == 'HELO':
+            count += 1
             responce = 'hello'
             responce.strip('HELO')
             conn.send(responce.encode())
-        elif 'MAIL FROM' in cap_sentence:
+        elif 'MAIL FROM' in cap_sentence and count == 1:
+            count += 1
             responce = '250 OK'
             mailfrom = cap_sentence
             mailfrom = mailfrom[10:]
             conn.send(responce.encode())
-        elif 'RCPT TO' in cap_sentence:
+        elif 'RCPT TO' in cap_sentence and count == 2:
+            count += 1
             responce = '250 OK'
             rcptto = cap_sentence
             reciever = cap_sentence
@@ -56,11 +57,9 @@ def clientthread(conn,port):
             if not os.path.exists(current_directory): #----
                 os.makedirs(current_directory)  #----END dir creation
             conn.send(responce.encode())
-        elif cap_sentence == 'DATA':
-            responce = '354 Send message content; Format for message\n'
-            responce = responce + 'Subject: XXXxxxXXX\n'
-            responce = responce + '<body>\n'
-            responce = responce + 'After <body> is complete clear the line. End with <CLRF>.<CLRF>'
+        elif cap_sentence == 'DATA' and count == 3:
+            count += 1
+            responce = '354 Send message content; End with <CLRF>.<CLRF>'
             conn.send(responce.encode())
             date = 'Date: {:%Y-%m-%d %H:%M:%S}'.format(datetime.datetime.now())
             files = os.listdir(current_directory)               #----START new email creation
@@ -70,38 +69,31 @@ def clientthread(conn,port):
                     mtime = os.path.getmtime(current_directory) #----
                     if mtime > max_mtime:                       #----
                         email = fname                           #----
+                    last = email.split('.')[0]                  #----makes a new file if dir is empty
+                    emailfile = email.split('.')[1]             #----
+                    last = int(last) + 1                        #----
+                    emailfile = '00' + str(last) + '.' + emailfile #----
             else:                                               #----
-                email = '001.email'                             #----makes a new file if dir is empty
-            last = email.split('.')[0]                          #----
-            emailfile = email.split('.')[1]                     #----
-            last = int(last) + 1                                #----
-            emailfile = '00' + str(last) + '.' + emailfile      #----END new email creation
+                emailfile = '001.email'                         #----END new email creation
             body = 'Subject: '
-            while 1:                            #----START loop for email content
-                data = conn.recv(1024).decode() #----
-                body = (body + data + '\n')     #----
-                dataresp = ' '                  #----
-                conn.send(dataresp.encode())    #----
-                if data == '.':                 #----
-                    break                       #----END loop for email content
-
+            data = conn.recv(1024).decode()
+            body = data
             filepath = os.path.join(current_directory, emailfile)
             f = open(filepath, "a")             #---- START writes content to the new email file
             f.write(date + '\n')                #---- write date
             f.write('From: ' + mailfrom + '\n') #---- write who from
             f.write('To: ' + reciever + '\n')   #---- write to
-            f.write(body)                       #---- write body
+            f.write('Subject: ' + body)         #---- write body
             f.close()                           #---- END close file
             responce = '250 OKAY'
             conn.send(responce.encode())
         elif cap_sentence == 'QUIT':
             responce = '221 Bye'
             conn.send(responce.encode())
-            conn.shutdown(1)
             conn.close()
-            sys.exit()
         else:
-            responce = '500 Invalid command'
+            responce = '500 Command invalid or protocol command out of order. \n Start from helo.'
+            count = 0
             conn.send(responce.encode())
 
 
@@ -115,62 +107,52 @@ def clientthread(conn,port):
 # UDP connection thread
 ##################################
 def UDP_connect(udp_listen_port):
-    print('The server is ready to recieve UDP.')
-    while True:
-        message, clientAddress = udp.recvfrom(2048)
-        modifiedMessage = message.decode().upper()
-        print('hey')
-
-        if 'GET' in modifiedMessage:
-            print(modifiedMessage)
-            msg = modifiedMessage.split('/')
-            user = msg[2]
-            count = modifiedMessage.split('COUNT:')
-            count = int(count[1])
-            print(count)
-            print(user)
-            mail_directory = os.getcwd()
-            mail_directory = os.path.join(mail_directory+'/db/'+user)
-            print(mail_directory)
-            if not os.path.exists(mail_directory): 
-                responce = '404: File path not found.'
-                udp.sendto(responce.encode(), clientAddress)
-            else:
-                files = os.listdir(mail_directory)
-                files = sorted(files) 
-                files = reversed(files)
-                files = list(files)
-                current_directory = os.getcwd()
-                i = 0
-                while i < count and count < len(files):
-                    print('top of while')
-                    message = ''
-                    mail = files[i]
-                    filepath = os.path.join(mail_directory, mail)
-                    f = open(filepath, 'r')
-                    message = f.read()
-                    f.close()
-                    mail = mail.split('.')[0]
-                    mail = mail + '.txt'
-                    storepath = os.path.join(current_directory,mail)
-                    m = open(storepath, 'a')
-                    print(message)
-                    m.write(message)
-                    f.close()
-                    i += 1
-
-
-        else: 
-            print('Invalid GET request')
-
+    message, clientAddress = udp.recvfrom(2048)
+    modifiedMessage = message.decode().upper()
+    if 'GET' in modifiedMessage:                #----START Get request
+        msg = modifiedMessage.split('/')        #----split msg to ID user
+        user = msg[2]                           #----init user
+        count = modifiedMessage.split('COUNT:') #----Split count to know how many emails to retrieve
+        count = int(count[1])                   #----convert string to int
+                                                #----END GET request
+        mail_directory = os.getcwd()                                #----current dir path
+        mail_directory = os.path.join(mail_directory+'/db/'+user)   #----add to user dir to current path                              
+        if not os.path.exists(mail_directory):                      #----checks if user is in DB
+            responce = '404: File path not found.'
+            udp.sendto(responce.encode(), clientAddress)
+        else:
+            files = os.listdir(mail_directory)                      #----grabs emails of the user
+            files = sorted(files) 
+            files = reversed(files)
+            files = list(files)
+            current_directory = os.getcwd()
+            i = 0
+            while i < count and count < len(files):             #----START writing emails to txt files
+                message = ''                                    #----
+                mail = files[i]                                 #----
+                filepath = os.path.join(mail_directory, mail)   #----
+                f = open(filepath, 'r')                         #----
+                message = f.read()                              #----
+                f.close()                                       #----
+                mail = mail.split('.')[0]                       #---- 
+                mail = mail + '.txt'                            #----
+                storepath = os.path.join(current_directory,mail)#----
+                m = open(storepath, 'a')                        #----
+                m.write(message)                                #----
+                f.close()                                       #----END closes txt files
+                i += 1
+    else: 
+        print('Invalid GET request')
+    modifiedMessage = "Check current directory for text file"
     udp.sendto(modifiedMessage.encode(), clientAddress)
+
 
 udp = socket(AF_INET, SOCK_DGRAM)
 udp.bind(('', udp_listen_port))
 
-tcp = socket(AF_INET, SOCK_STREAM)
+tcp = socket(AF_INET, SOCK_STREAM) 
 tcp.bind(('',int(arg_list[1])))
-tcp.listen(1)
+tcp.listen(5)
 
 
 
@@ -181,8 +163,9 @@ while True:
     for s in inputready:
         if s == tcp:
             conn, addr = tcp.accept()
-            threadTCP = Thread(target = clientthread(conn,tcp_listen_port))
-            threadTCP.start()
+            #threadTCP = Thread(target = clientthread(conn,tcp_listen_port)).start()
+            #threadTCP.start()
+            _thread.start_new_thread(clientthread ,(conn,tcp_listen_port))
 
         elif s == udp:
             threadUDP = Thread(target = UDP_connect(udp_listen_port))
